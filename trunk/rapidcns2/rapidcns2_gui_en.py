@@ -5,6 +5,7 @@
 Usage: python3 rapidcns2_gui_en.py
 Requirements: Python 3 and tkinter (sudo apt install python3-tk if missing).
 """
+import gzip
 import os
 import queue
 import re
@@ -107,6 +108,28 @@ def bind_paths(*paths):
     return ",".join(keep)
 
 
+# Steps that fail on simulated BAMs without being errors: no structural variant -> empty VCF ->
+# AnnotSV exits without writing its table; SAVANA CNA without real breakpoints. Their outputs are
+# not needed by the report (AnnotSV) or have an empty fallback (SAVANA).
+SIMULATED_CONFIG_NAME = ".rapidcns2_simulated.config"
+SIMULATED_CONFIG = """// Written by rapidcns2_gui_en.py for SIMULATED BAMs ("Simulated BAM" ticked): do not use for real data.
+process {
+    withName: 'annotSv.*' { errorStrategy = 'ignore' }
+    withName: 'savanaCna' { errorStrategy = 'ignore' }
+}
+"""
+
+
+def bam_is_simulated(bam):
+    """True if the BAM header carries the "SIMULATED DATA" comment written by simulate_glioma_hg38.py.
+    A BAM is BGZF (gzip-compatible): the header is in the first decompressed bytes."""
+    try:
+        with gzip.open(bam, "rb") as fh:
+            return b"SIMULATED DATA" in fh.read(1 << 20)
+    except (OSError, EOFError):
+        return False
+
+
 def find_bams(cohort_dir):
     """Return {id: path} for the BAMs in <cohort>/*.bam and <cohort>/*/*.bam."""
     d = Path(cohort_dir).expanduser()
@@ -129,6 +152,7 @@ class App(tk.Tk):
         self.mnpflex = tk.BooleanVar(value=True)
         self.humanvar = tk.BooleanVar(value=HUMANVAR_DEFAULT)
         self.resume = tk.BooleanVar(value=True)
+        self.simulated = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value="Ready")
         self.progress_text = tk.StringVar(value="")
         self.start_time = None
@@ -155,7 +179,7 @@ class App(tk.Tk):
         ttk.Label(f1, text="Sample").grid(row=1, column=0, sticky="w", **pad)
         self.combo = ttk.Combobox(f1, textvariable=self.sample, state="readonly")
         self.combo.grid(row=1, column=1, sticky="ew", **pad)
-        self.combo.bind("<<ComboboxSelected>>", lambda e: self._update_preview())
+        self.combo.bind("<<ComboboxSelected>>", lambda e: self._sample_changed())
         self.count_label = ttk.Label(f1, text="")
         self.count_label.grid(row=1, column=2, columnspan=2, sticky="w", **pad)
 
@@ -195,6 +219,9 @@ class App(tk.Tk):
                         command=self._update_preview).grid(row=1, column=2, columnspan=2, sticky="w", **pad)
         ttk.Checkbutton(f3, text="Resume (-resume)", variable=self.resume,
                         command=self._update_preview).grid(row=1, column=4, columnspan=2, sticky="w", **pad)
+        # ticked automatically for BAMs written by simulate_glioma_hg38.py; can be changed by hand
+        ttk.Checkbutton(f3, text="Simulated BAM (ignore AnnotSV/SAVANA failures)", variable=self.simulated,
+                        command=self._update_preview).grid(row=1, column=6, columnspan=4, sticky="w", **pad)
 
         # --- Buttons
         f4 = ttk.Frame(self)
@@ -251,6 +278,12 @@ class App(tk.Tk):
         self.count_label.config(text=f"{len(ids)} BAM file(s) found")
         if self.sample.get() not in ids:
             self.sample.set(ids[0] if ids else "")
+        self._sample_changed()
+
+    def _sample_changed(self):
+        """New sample: detect whether its BAM is simulated, then refresh the command."""
+        bam = self.samples.get(self.sample.get())
+        self.simulated.set(bool(bam) and bam_is_simulated(bam))
         self._update_preview()
 
     def _outdir(self):
@@ -281,6 +314,8 @@ class App(tk.Tk):
         cmd += ["-profile", v["profile"]]
         if v["config"] and (Path(v["rundir"]) / v["config"]).is_file():
             cmd += ["-c", v["config"]]
+        if self.simulated.get():
+            cmd += ["-c", SIMULATED_CONFIG_NAME]      # written in the launch folder by run()
         cmd += ["--maxCpus", v["maxCpus"], "--maxMemory", v["maxMemory"]]
         if self.resume.get():
             cmd.append("-resume")
@@ -328,6 +363,10 @@ class App(tk.Tk):
             return
 
         cmd = self.build_command()
+        if self.simulated.get():
+            (rundir / SIMULATED_CONFIG_NAME).write_text(SIMULATED_CONFIG)
+            self._append_log(f"\nSimulated BAM: {SIMULATED_CONFIG_NAME} written in {rundir} "
+                             "(AnnotSV and SAVANA CNA failures are ignored)\n")
         self._append_log("\n$ " + self._command_line(cmd) + "\n\n")
         self.proc = subprocess.Popen(cmd, cwd=rundir, env={**os.environ, **NXF_ENV}, stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT, text=True, bufsize=1)
