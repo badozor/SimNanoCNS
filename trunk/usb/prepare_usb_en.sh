@@ -317,6 +317,9 @@ if [ -x "\$R/jre/bin/java" ]; then export JAVA_HOME="\$R/jre"; export PATH="\$JA
 export NXF_HOME="\$R/nxf_home"
 export NXF_OFFLINE=true
 export NXF_DISABLE_CHECK_LATEST=true
+# Nextflow >= 26.04 uses the strict syntax by default, not yet followed by Rapid-CNS2_nf 3.0:
+# legacy parser unless already set (NXF_SYNTAX_PARSER=v2 once the pipeline is migrated)
+export NXF_SYNTAX_PARSER="\${NXF_SYNTAX_PARSER:-v1}"
 export NXF_SINGULARITY_CACHEDIR="\$R/containers/sif"
 export NXF_APPTAINER_CACHEDIR="\$R/containers/sif"
 

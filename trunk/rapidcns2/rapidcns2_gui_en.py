@@ -45,6 +45,11 @@ for _k in DEFAULTS:
 HUMANVAR_DEFAULT = os.environ.get("RCNS_HUMANVAR", "true").lower() == "true"
 BIND_PATHS = os.environ.get("RCNS_BINDPATHS", "")   # --containerBindPaths if set
 
+# Nextflow >= 26.04 parses with the strict syntax by default, which Rapid-CNS2_nf 3.0 does not
+# follow yet (import in nextflow.config, statements outside the workflow in main.nf): the legacy
+# parser is used unless NXF_SYNTAX_PARSER is already set (e.g. to v2 once the pipeline is migrated).
+NXF_ENV = {"NXF_SYNTAX_PARSER": os.environ.get("NXF_SYNTAX_PARSER", "v1")}
+
 
 # Rapid-CNS2 v3.0 processes for one sample (taken from a complete run).
 # Used to estimate the total number of steps for the progress bar.
@@ -261,10 +266,16 @@ class App(tk.Tk):
             cmd.append("-resume")
         return cmd
 
+    @staticmethod
+    def _command_line(cmd):
+        """Command as it can be pasted in a terminal, with the Nextflow environment."""
+        env = " ".join(f"{k}={shlex.quote(v)}" for k, v in NXF_ENV.items())
+        return env + " " + " ".join(shlex.quote(c) for c in cmd)
+
     def _update_preview(self):
         self.preview.delete("1.0", "end")
         if self.sample.get():
-            self.preview.insert("1.0", " ".join(shlex.quote(c) for c in self.build_command()))
+            self.preview.insert("1.0", self._command_line(self.build_command()))
 
     def copy_command(self):
         self.clipboard_clear()
@@ -297,8 +308,8 @@ class App(tk.Tk):
             return
 
         cmd = self.build_command()
-        self._append_log("\n$ " + " ".join(shlex.quote(c) for c in cmd) + "\n\n")
-        self.proc = subprocess.Popen(cmd, cwd=rundir, stdout=subprocess.PIPE,
+        self._append_log("\n$ " + self._command_line(cmd) + "\n\n")
+        self.proc = subprocess.Popen(cmd, cwd=rundir, env={**os.environ, **NXF_ENV}, stdout=subprocess.PIPE,
                                      stderr=subprocess.STDOUT, text=True, bufsize=1)
         threading.Thread(target=self._reader, args=(self.proc,), daemon=True).start()
         self.btn_run.config(state="disabled")
