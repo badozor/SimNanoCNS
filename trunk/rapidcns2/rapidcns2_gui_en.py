@@ -43,7 +43,7 @@ DEFAULTS = {
 for _k in DEFAULTS:
     DEFAULTS[_k] = os.environ.get("RCNS_" + _k.upper(), DEFAULTS[_k])
 HUMANVAR_DEFAULT = os.environ.get("RCNS_HUMANVAR", "true").lower() == "true"
-BIND_PATHS = os.environ.get("RCNS_BINDPATHS", "")   # --containerBindPaths if set
+BIND_PATHS = os.environ.get("RCNS_BINDPATHS", "")   # extra --containerBindPaths folders (comma-separated)
 
 # Nextflow >= 26.04 parses with the strict syntax by default, which Rapid-CNS2_nf 3.0 does not
 # follow yet (import in nextflow.config, statements outside the workflow in main.nf): the legacy
@@ -88,6 +88,23 @@ def count_trace(trace_file):
     except (OSError, ValueError):
         pass
     return done
+
+
+def bind_paths(*paths):
+    """Folders to mount in the containers (--containerBindPaths), comma-separated.
+
+    Rapid-CNS2_nf passes --annotsvAnnot, --annovarPath and --annovarDB to its processes as plain
+    strings, so Nextflow does not mount them: without this list, AnnotSV and ANNOVAR do not find
+    their files inside Docker/Singularity. Empty or missing folders are skipped, as are folders
+    already inside another one of the list."""
+    dirs = []
+    for p in paths:
+        if p and Path(p).is_dir():
+            d = os.path.abspath(p)
+            if d not in dirs:
+                dirs.append(d)
+    keep = [d for d in dirs if not any(d != o and d.startswith(o.rstrip("/") + "/") for o in dirs)]
+    return ",".join(keep)
 
 
 def find_bams(cohort_dir):
@@ -253,8 +270,11 @@ class App(tk.Tk):
                "--minimumMgmtCov", v["minimumMgmtCov"],
                "--mnpFlex", "true" if self.mnpflex.get() else "false",
                "--runHumanVariation", "true" if self.humanvar.get() else "false"]
-        if BIND_PATHS:
-            cmd += ["--containerBindPaths", BIND_PATHS]
+        # annotation folders given above + RCNS_BINDPATHS (whole USB stick, or extra folders,
+        # e.g. the target of symbolic links inside the annotation folders)
+        binds = bind_paths(*BIND_PATHS.split(","), v["annotsvAnnot"], v["annovarPath"], v["annovarDB"])
+        if binds:
+            cmd += ["--containerBindPaths", binds]
         if v["purity"]:
             # value with a space: Nextflow accepts it even though it starts with "--"
             cmd += ["--savanaCnaArgs", f"--overrule_cellularity {v['purity']}"]
