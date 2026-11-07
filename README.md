@@ -1,4 +1,4 @@
-# SimNanoCNS
+# SimNanoCNS <img src="logo/simnanocns_hex.png" align="right" height="139" alt="SimNanoCNS logo" />
 Simulate Nanopore BAMs of brain tumours and test Rapid-CNS2_nf
 
 
