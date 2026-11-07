@@ -299,6 +299,9 @@ fi
 say "Graphical interface and samples"
 # ----------------------------------------------------------------------------
 [ -f "$GUI_PY" ] && cp "$GUI_PY" "$R/gui/rapidcns2_gui.py"
+# logo shown by the interface (optional): looked for next to the interface script
+GUI_LOGO=$(dirname "$GUI_PY")/simnanocns_logo.png
+[ -f "$GUI_LOGO" ] && cp "$GUI_LOGO" "$R/gui/simnanocns_logo.png"
 if [ -n "$SAMPLES_DIR" ]; then
     rsync -a --info=progress2 --include='*/' --include='*.bam' --include='*.bai' --exclude='*' \
           --prune-empty-dirs "$SAMPLES_DIR/" "$R/samples/"

@@ -494,8 +494,22 @@ def exportable():
             for k, v in ((k, st.session_state[k]) for k in DEFAULTS)}
 
 
+def find_logo():
+    """SimNanoCNS logo: next to this script, else in the project's logo/ folder."""
+    here = Path(__file__).resolve().parent
+    for p in (here / "simnanocns_logo.png", here.parent.parent / "logo" / "simnanocns_hex.png"):
+        if p.is_file():
+            return p
+    return None
+
+
+LOGO = find_logo()
+
+
 def sidebar():
     sb = st.sidebar
+    if LOGO is not None:
+        sb.image(str(LOGO), width=120)
     sb.header("Paths")
     sb.text_input("Working directory", key="workdir",
                   help="Relative paths (outputs, probes) are resolved from here.")
@@ -807,7 +821,8 @@ def tab_run():
 
 
 def main():
-    st.set_page_config(page_title="SimNanoCNS", layout="wide")
+    st.set_page_config(page_title="SimNanoCNS", layout="wide",
+                       page_icon=str(LOGO) if LOGO is not None else None)
     init_state()
     st.title("SimNanoCNS: simulation setup")
     st.caption("Simulated Nanopore BAMs (adaptive sampling, NPHD panel, hg38) to test Rapid-CNS2_nf")

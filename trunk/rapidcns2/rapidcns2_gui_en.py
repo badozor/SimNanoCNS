@@ -139,11 +139,31 @@ def find_bams(cohort_dir):
     return {p.stem: p for p in bams}
 
 
+def find_logo():
+    """SimNanoCNS logo: next to this script, else in the project's logo/ folder."""
+    here = Path(__file__).resolve().parent
+    for p in (here / "simnanocns_logo.png", here.parent.parent / "logo" / "simnanocns_hex.png"):
+        if p.is_file():
+            return p
+    return None
+
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Rapid-CNS2: pipeline launcher")
-        self.geometry("980x780")
+        self.geometry("980x900")
+        self.logo_img = None
+        logo = find_logo()
+        if logo is not None:
+            try:
+                img = tk.PhotoImage(file=str(logo))
+                while img.height() > 130:      # large PNG fallback: shrink by integer factor
+                    img = img.subsample(2, 2)
+                self.logo_img = img
+                self.iconphoto(True, img)
+            except tk.TclError:
+                self.logo_img = None           # Tk < 8.6 cannot read PNG: no logo
         self.proc = None
         self.log_queue = queue.Queue()
         self.samples = {}
@@ -167,6 +187,17 @@ class App(tk.Tk):
     # ------------------------------------------------------------------ UI
     def _build(self):
         pad = {"padx": 6, "pady": 3}
+
+        # --- Header with logo
+        if self.logo_img is not None:
+            fh = ttk.Frame(self)
+            fh.pack(fill="x", padx=8, pady=(8, 0))
+            ttk.Label(fh, image=self.logo_img).pack(side="left")
+            box = ttk.Frame(fh)
+            box.pack(side="left", padx=12)
+            ttk.Label(box, text="Rapid-CNS2 pipeline launcher",
+                      font=("TkDefaultFont", 16, "bold")).pack(anchor="w")
+            ttk.Label(box, text="SimNanoCNS project").pack(anchor="w")
 
         # --- Sample
         f1 = ttk.LabelFrame(self, text="Sample")
